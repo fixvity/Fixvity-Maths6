@@ -25,13 +25,15 @@ body{
   padding:18px;
   margin-bottom:16px;
 }
-h1{color:#2563eb;margin:0}
-p{color:#6b7280}
+h1{margin:0;color:#2563eb}
+p.muted{color:#6b7280;margin-top:4px}
+
 label{font-weight:600;font-size:14px}
 input,select{
   width:100%;
   padding:12px;
-  margin:6px 0 14px;
+  margin-top:6px;
+  margin-bottom:14px;
   border-radius:10px;
   border:1px solid #d1d5db;
   font-size:15px;
@@ -46,11 +48,12 @@ button{
   font-weight:700;
   cursor:pointer;
 }
-.secondary{
+button.secondary{
   background:#eef2ff;
   color:#111;
   margin-top:10px;
 }
+
 .grid{
   display:grid;
   grid-template-columns:1fr 1fr;
@@ -59,15 +62,16 @@ button{
 @media(max-width:900px){
   .grid{grid-template-columns:1fr}
 }
+
 .result{
   background:#f9fafb;
-  padding:14px;
   border-radius:10px;
+  padding:14px;
 }
 .step{
   background:#f3f4f6;
-  padding:10px;
   border-radius:8px;
+  padding:10px;
   margin-bottom:8px;
 }
 .badge{
@@ -77,9 +81,19 @@ button{
   padding:4px 8px;
   border-radius:999px;
   font-size:12px;
-  margin-bottom:6px;
+  margin-right:6px;
 }
-.error{color:#dc2626;font-weight:600}
+.warning{
+  background:#fff7ed;
+  color:#9a3412;
+  padding:12px;
+  border-radius:10px;
+  margin-bottom:10px;
+  font-weight:600;
+  font-size:14px;
+}
+.error{color:#dc2626;font-weight:700}
+.hidden{display:none}
 code{
   background:#111827;
   color:#f9fafb;
@@ -94,7 +108,7 @@ code{
 
 <div class="card">
 <h1>Derivative Calculator</h1>
-<p>Numerical differentiation with support up to 5th derivative</p>
+<p class="muted">Numerical differentiation with support up to 5th derivative</p>
 
 <label>Function f(x)</label>
 <input id="fx" value="sin(x^2)">
@@ -109,15 +123,22 @@ code{
 </select>
 
 <label>Evaluate at x</label>
-<input id="evalx" value="2">
+<input id="xval" value="2">
 
 <button onclick="calculate()">Calculate Derivative</button>
 <button class="secondary" onclick="resetAll()">Reset</button>
 </div>
 
 <div class="grid">
+
 <div class="card">
 <h3>Result</h3>
+
+<div id="warning" class="warning hidden">
+⚠ High-order numerical derivatives may be unstable.
+Results are approximate and sensitive to step size.
+</div>
+
 <div id="result" class="result"></div>
 </div>
 
@@ -125,81 +146,98 @@ code{
 <h3>Step-by-Step</h3>
 <div id="steps"></div>
 </div>
-</div>
 
+</div>
 </div>
 
 <script>
-function sanitize(expr){
+function clean(expr){
   return expr
     .replace(/\^/g,"**")
     .replace(/sin/g,"Math.sin")
     .replace(/cos/g,"Math.cos")
     .replace(/tan/g,"Math.tan")
-    .replace(/ln/g,"Math.log")
-    .replace(/e\^/g,"Math.exp");
+    .replace(/ln/g,"Math.log");
 }
 
-function buildFunction(expr){
-  return Function("x","return "+expr);
+function baseFunction(expr){
+  const f = Function("x","return "+expr);
+  return f;
 }
 
-function derivative(fn, order){
-  const h=1e-4;
+function nthDerivative(f, order){
+  const h = 1e-4;
+  let g = f;
 
-  if(order===0) return fn;
+  for(let i=0;i<order;i++){
+    const prev = g;
+    g = function(x){
+      return (prev(x+h)-prev(x-h))/(2*h);
+    };
+  }
+  return g;
+}
 
-  return x=>{
-    if(order===1){
-      return (fn(x+h)-fn(x-h))/(2*h);
-    }
-    return (derivative(fn,order-1)(x+h)
-          - derivative(fn,order-1)(x-h))/(2*h);
-  };
+function showAccuracyWarning(order, expr){
+  const trig = /sin|cos|tan/.test(expr);
+  const warn = document.getElementById("warning");
+  if(order >= 4 || (trig && order >= 3)){
+    warn.classList.remove("hidden");
+  }else{
+    warn.classList.add("hidden");
+  }
 }
 
 function calculate(){
-  const result=document.getElementById("result");
-  const steps=document.getElementById("steps");
-  result.innerHTML="";
-  steps.innerHTML="";
+  const result = document.getElementById("result");
+  const steps = document.getElementById("steps");
+  result.innerHTML = "";
+  steps.innerHTML = "";
+
+  const raw = fx.value;
+  const expr = clean(raw);
+  const order = Number(document.getElementById("order").value);
+  const x = Number(document.getElementById("xval").value);
 
   try{
-    const expr=sanitize(fx.value);
-    const fn=buildFunction(expr);
-    const x=parseFloat(evalx.value);
-    const n=parseInt(order.value);
+    const f = baseFunction(expr);
+    const d = nthDerivative(f, order);
+    const value = d(x);
 
-    const dn=derivative(fn,n);
-    const value=dn(x);
+    showAccuracyWarning(order, raw);
 
-    result.innerHTML=`
-      <span class="badge">${n}${ordinal(n)} Derivative</span><br>
-      <strong>Value at x=${x}:</strong> ${value.toFixed(6)}
+    result.innerHTML = `
+      <span class="badge">${order}ᵗʰ Derivative</span><br><br>
+      <strong>Value at x = ${x}:</strong>
+      <code>${value.toFixed(6)}</code>
     `;
 
-    steps.innerHTML+=`
-      <div class="step">Used recursive central-difference method</div>
-      <div class="step">Each derivative built from the previous order</div>
+    steps.innerHTML += `
+      <div class="step">Central difference numerical method used</div>
+      <div class="step">Recursive differentiation up to ${order}ᵗʰ order</div>
       <div class="step">Step size h = 0.0001</div>
-      <div class="step">Stable up to 5th derivative</div>
     `;
-  }
-  catch{
-    result.innerHTML=`<span class="error">Invalid or unsupported expression</span>`;
-  }
-}
 
-function ordinal(n){
-  return n===1?"st":n===2?"nd":n===3?"rd":"th";
+    if(order >= 4){
+      steps.innerHTML += `
+        <div class="step">
+          Higher-order derivatives amplify numerical noise.
+        </div>
+      `;
+    }
+
+  }catch(e){
+    result.innerHTML = `<span class="error">Invalid or unsupported expression</span>`;
+  }
 }
 
 function resetAll(){
   fx.value="sin(x^2)";
-  evalx.value="2";
   order.value="1";
-  result.innerHTML="";
-  steps.innerHTML="";
+  xval.value="2";
+  document.getElementById("result").innerHTML="";
+  document.getElementById("steps").innerHTML="";
+  document.getElementById("warning").classList.add("hidden");
 }
 </script>
 
