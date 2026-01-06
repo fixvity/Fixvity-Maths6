@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Derivative Calculator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto;
+  background:#f4f6fb;
+  color:#111827;
+}
+.container{
+  max-width:1100px;
+  margin:auto;
+  padding:16px;
+}
+.card{
+  background:#fff;
+  border-radius:14px;
+  box-shadow:0 10px 30px rgba(0,0,0,.08);
+  padding:18px;
+  margin-bottom:16px;
+}
+h1{
+  margin:0 0 6px;
+  color:#2563eb;
+}
+p.muted{
+  margin:0 0 12px;
+  color:#6b7280;
+}
+label{
+  font-weight:600;
+  font-size:14px;
+}
+input,select{
+  width:100%;
+  padding:12px;
+  margin-top:6px;
+  margin-bottom:14px;
+  border-radius:10px;
+  border:1px solid #d1d5db;
+  font-size:15px;
+}
+button{
+  width:100%;
+  padding:14px;
+  border:none;
+  border-radius:12px;
+  background:#2563eb;
+  color:#fff;
+  font-weight:700;
+  cursor:pointer;
+}
+button.secondary{
+  background:#eef2ff;
+  color:#111;
+  margin-top:10px;
+}
+.grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:16px;
+}
+@media(max-width:900px){
+  .grid{grid-template-columns:1fr}
+}
+.result{
+  background:#f9fafb;
+  border-radius:10px;
+  padding:12px;
+  font-size:15px;
+}
+.step{
+  background:#f3f4f6;
+  border-radius:8px;
+  padding:10px;
+  margin-bottom:8px;
+}
+.badge{
+  display:inline-block;
+  background:#e0e7ff;
+  color:#1e3a8a;
+  padding:4px 8px;
+  border-radius:999px;
+  font-size:12px;
+  margin-right:6px;
+}
+.error{
+  color:#dc2626;
+  font-weight:600;
+}
+code{
+  background:#111827;
+  color:#f9fafb;
+  padding:4px 6px;
+  border-radius:6px;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<div class="card">
+<h1>Derivative Calculator</h1>
+<p class="muted">Symbolic differentiation with steps, evaluation & higher-order derivatives</p>
+
+<label>Function f(x)</label>
+<input id="fx" value="sin(x^2)">
+
+<label>Derivative Order</label>
+<select id="order">
+  <option value="1">First derivative</option>
+  <option value="2">Second derivative</option>
+</select>
+
+<label>Evaluate derivative at x (optional)</label>
+<input id="evalx" placeholder="e.g. 2">
+
+<button onclick="calculate()">Calculate Derivative</button>
+<button class="secondary" onclick="resetAll()">Reset</button>
+</div>
+
+<div class="grid">
+
+<div class="card">
+<h3>Result</h3>
+<div id="rules"></div>
+<div class="result" id="result"></div>
+</div>
+
+<div class="card">
+<h3>Step-by-Step Solution</h3>
+<div id="steps"></div>
+</div>
+
+</div>
+</div>
+
+<script>
+// ----------- SAFE PARSER -----------
+function clean(expr){
+  return expr
+    .replace(/\^/g,"**")
+    .replace(/ln/g,"Math.log")
+    .replace(/sin/g,"Math.sin")
+    .replace(/cos/g,"Math.cos")
+    .replace(/tan/g,"Math.tan")
+    .replace(/exp/g,"Math.exp");
+}
+
+// ----------- SYMBOLIC ENGINE (LIMITED BUT SAFE) -----------
+function derivativeSymbolic(expr){
+  expr=expr.replace(/\s+/g,"");
+
+  // Power rule: x^n
+  let m=expr.match(/^x\*\*([0-9]+)$/);
+  if(m){
+    let n=parseInt(m[1]);
+    return {
+      rule:"Power Rule",
+      result:`${n}*x**${n-1}`,
+      steps:[
+        `Given f(x) = x^${n}`,
+        `Apply power rule: d/dx(x^n) = n·x^(n−1)`
+      ]
+    };
+  }
+
+  if(expr==="x"){
+    return {
+      rule:"Basic Rule",
+      result:"1",
+      steps:["d/dx(x) = 1"]
+    };
+  }
+
+  if(expr==="Math.sin(x)"){
+    return {
+      rule:"Trigonometric Rule",
+      result:"Math.cos(x)",
+      steps:["d/dx(sin x) = cos x"]
+    };
+  }
+
+  if(expr==="Math.cos(x)"){
+    return {
+      rule:"Trigonometric Rule",
+      result:"-Math.sin(x)",
+      steps:["d/dx(cos x) = −sin x"]
+    };
+  }
+
+  // Chain rule: sin(x^2)
+  let c=expr.match(/^Math\.sin\((x\*\*[0-9]+)\)$/);
+  if(c){
+    let inner=c[1];
+    let n=parseInt(inner.split("**")[1]);
+    return {
+      rule:"Chain Rule",
+      result:`Math.cos(x**${n})*${n}*x**${n-1}`,
+      steps:[
+        "Outer function: sin(u)",
+        `Inner function: u = x^${n}`,
+        "Derivative of sin(u) = cos(u)",
+        "Derivative of u = "+n+"·x^"+(n-1),
+        "Multiply outer and inner derivatives"
+      ]
+    };
+  }
+
+  return {
+    rule:"Unsupported",
+    result:null,
+    steps:["This function is not supported in symbolic mode."]
+  };
+}
+
+// ----------- MAIN CALCULATOR -----------
+function calculate(){
+  const fx=document.getElementById("fx").value;
+  const order=document.getElementById("order").value;
+  const evalx=document.getElementById("evalx").value;
+
+  const resultBox=document.getElementById("result");
+  const stepsBox=document.getElementById("steps");
+  const rulesBox=document.getElementById("rules");
+
+  resultBox.innerHTML="";
+  stepsBox.innerHTML="";
+  rulesBox.innerHTML="";
+
+  let expr=clean(fx);
+
+  let d1=derivativeSymbolic(expr);
+  if(!d1.result){
+    resultBox.innerHTML=`<span class="error">Unable to differentiate this expression symbolically.</span>`;
+    return;
+  }
+
+  let final=d1.result;
+  let steps=[...d1.steps];
+  let rules=[d1.rule];
+
+  if(order==="2"){
+    let d2=derivativeSymbolic(final);
+    if(d2.result){
+      final=d2.result;
+      steps.push("Second derivative applied");
+      rules.push(d2.rule);
+    }
+  }
+
+  rulesBox.innerHTML=rules.map(r=>`<span class="badge">${r}</span>`).join("");
+
+  resultBox.innerHTML=`
+    <strong>Derivative:</strong><br>
+    <code>${final.replace(/Math\./g,"")}</code>
+  `;
+
+  if(evalx){
+    try{
+      const val=Function("x","return "+final)(Number(evalx));
+      resultBox.innerHTML+=`<br><br><strong>At x = ${evalx}:</strong> ${val.toFixed(6)}`;
+    }catch{
+      resultBox.innerHTML+=`<br><span class="error">Cannot evaluate at this x value</span>`;
+    }
+  }
+
+  steps.forEach(s=>{
+    stepsBox.innerHTML+=`<div class="step">${s}</div>`;
+  });
+}
+
+function resetAll(){
+  fx.value="sin(x^2)";
+  evalx.value="";
+  result.innerHTML="";
+  steps.innerHTML="";
+  rules.innerHTML="";
+}
+</script>
+</body>
+</html>
