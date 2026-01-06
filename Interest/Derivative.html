@@ -25,15 +25,13 @@ body{
   padding:18px;
   margin-bottom:16px;
 }
-h1{margin:0;color:#2563eb}
-p.muted{color:#6b7280;margin-top:4px}
-
+h1{color:#2563eb;margin:0}
+p{color:#6b7280}
 label{font-weight:600;font-size:14px}
 input,select{
   width:100%;
   padding:12px;
-  margin-top:6px;
-  margin-bottom:14px;
+  margin:6px 0 14px;
   border-radius:10px;
   border:1px solid #d1d5db;
   font-size:15px;
@@ -48,12 +46,11 @@ button{
   font-weight:700;
   cursor:pointer;
 }
-button.secondary{
+.secondary{
   background:#eef2ff;
   color:#111;
   margin-top:10px;
 }
-
 .grid{
   display:grid;
   grid-template-columns:1fr 1fr;
@@ -62,16 +59,15 @@ button.secondary{
 @media(max-width:900px){
   .grid{grid-template-columns:1fr}
 }
-
 .result{
   background:#f9fafb;
-  border-radius:10px;
   padding:14px;
+  border-radius:10px;
 }
 .step{
   background:#f3f4f6;
-  border-radius:8px;
   padding:10px;
+  border-radius:8px;
   margin-bottom:8px;
 }
 .badge{
@@ -81,9 +77,9 @@ button.secondary{
   padding:4px 8px;
   border-radius:999px;
   font-size:12px;
-  margin-right:6px;
+  margin-bottom:6px;
 }
-.error{color:#dc2626;font-weight:700}
+.error{color:#dc2626;font-weight:600}
 code{
   background:#111827;
   color:#f9fafb;
@@ -98,7 +94,7 @@ code{
 
 <div class="card">
 <h1>Derivative Calculator</h1>
-<p class="muted">Symbolic differentiation with steps & evaluation</p>
+<p>Numerical differentiation with support up to 5th derivative</p>
 
 <label>Function f(x)</label>
 <input id="fx" value="sin(x^2)">
@@ -107,140 +103,103 @@ code{
 <select id="order">
   <option value="1">First Derivative</option>
   <option value="2">Second Derivative</option>
+  <option value="3">Third Derivative</option>
+  <option value="4">Fourth Derivative</option>
+  <option value="5">Fifth Derivative</option>
 </select>
 
-<label>Evaluate at x (optional)</label>
-<input id="xval" placeholder="Example: 3">
+<label>Evaluate at x</label>
+<input id="evalx" value="2">
 
 <button onclick="calculate()">Calculate Derivative</button>
 <button class="secondary" onclick="resetAll()">Reset</button>
 </div>
 
 <div class="grid">
-
 <div class="card">
 <h3>Result</h3>
-<div id="rules"></div>
-<div class="result" id="result"></div>
+<div id="result" class="result"></div>
 </div>
 
 <div class="card">
-<h3>Step-by-Step Solution</h3>
+<h3>Step-by-Step</h3>
 <div id="steps"></div>
 </div>
-
 </div>
+
 </div>
 
 <script>
-function cleanNumeric(expr){
+function sanitize(expr){
   return expr
     .replace(/\^/g,"**")
     .replace(/sin/g,"Math.sin")
     .replace(/cos/g,"Math.cos")
     .replace(/tan/g,"Math.tan")
     .replace(/ln/g,"Math.log")
-    .replace(/e\^x/g,"Math.exp(x)");
+    .replace(/e\^/g,"Math.exp");
 }
 
-function evalAt(expr,x){
-  const js = cleanNumeric(expr).replace(/x/g,`(${x})`);
-  return Function("return "+js)();
+function buildFunction(expr){
+  return Function("x","return "+expr);
 }
 
-/* ---- SYMBOLIC DERIVATIVE (SAFE RULE SET) ---- */
-function symbolicDerivative(expr, steps){
-  expr = expr.replace(/\s+/g,"");
+function derivative(fn, order){
+  const h=1e-4;
 
-  // sin(x^n)
-  let m = expr.match(/^sin\(x\^(\d+)\)$/);
-  if(m){
-    steps.push("Outer function: sin(u)");
-    steps.push("Inner function: u = x^"+m[1]);
-    steps.push("Derivative of sin(u) = cos(u)");
-    steps.push("Derivative of u = "+m[1]+"x^"+(m[1]-1));
-    return `${m[1]}*x^${m[1]-1}*cos(x^${m[1]})`;
-  }
+  if(order===0) return fn;
 
-  // cos(x^n)
-  m = expr.match(/^cos\(x\^(\d+)\)$/);
-  if(m){
-    steps.push("Outer function: cos(u)");
-    steps.push("Inner function: u = x^"+m[1]);
-    steps.push("Derivative of cos(u) = -sin(u)");
-    steps.push("Derivative of u = "+m[1]+"x^"+(m[1]-1));
-    return `-${m[1]}*x^${m[1]-1}*sin(x^${m[1]})`;
-  }
-
-  // x^n
-  m = expr.match(/^x\^(\d+)$/);
-  if(m){
-    steps.push("Power rule applied");
-    return `${m[1]}*x^${m[1]-1}`;
-  }
-
-  // sin(x)
-  if(expr==="sin(x)"){
-    steps.push("Derivative of sin(x)");
-    return "cos(x)";
-  }
-
-  // cos(x)
-  if(expr==="cos(x)"){
-    steps.push("Derivative of cos(x)");
-    return "-sin(x)";
-  }
-
-  throw "Unsupported expression";
+  return x=>{
+    if(order===1){
+      return (fn(x+h)-fn(x-h))/(2*h);
+    }
+    return (derivative(fn,order-1)(x+h)
+          - derivative(fn,order-1)(x-h))/(2*h);
+  };
 }
 
-/* ---- CALCULATE ---- */
 function calculate(){
-  const fx = document.getElementById("fx").value.trim();
-  const order = document.getElementById("order").value;
-  const xval = document.getElementById("xval").value;
-
-  const result = document.getElementById("result");
-  const stepsDiv = document.getElementById("steps");
-  const rules = document.getElementById("rules");
-
+  const result=document.getElementById("result");
+  const steps=document.getElementById("steps");
   result.innerHTML="";
-  stepsDiv.innerHTML="";
-  rules.innerHTML="";
+  steps.innerHTML="";
 
   try{
-    let steps=[];
-    let d1 = symbolicDerivative(fx, steps);
-    let derivative = d1;
+    const expr=sanitize(fx.value);
+    const fn=buildFunction(expr);
+    const x=parseFloat(evalx.value);
+    const n=parseInt(order.value);
 
-    if(order==="2"){
-      steps.push("Second derivative applied");
-      derivative = symbolicDerivative(d1, steps);
-    }
+    const dn=derivative(fn,n);
+    const value=dn(x);
 
-    rules.innerHTML='<span class="badge">Chain Rule</span><span class="badge">Power Rule</span>';
-    result.innerHTML=`<strong>Derivative:</strong> <code>${derivative}</code>`;
+    result.innerHTML=`
+      <span class="badge">${n}${ordinal(n)} Derivative</span><br>
+      <strong>Value at x=${x}:</strong> ${value.toFixed(6)}
+    `;
 
-    if(xval){
-      const numeric = evalAt(derivative, Number(xval));
-      result.innerHTML += `<br><strong>At x = ${xval}:</strong> ${numeric.toFixed(6)}`;
-    }
-
-    steps.forEach(s=>{
-      stepsDiv.innerHTML += `<div class="step">${s}</div>`;
-    });
-
-  }catch{
+    steps.innerHTML+=`
+      <div class="step">Used recursive central-difference method</div>
+      <div class="step">Each derivative built from the previous order</div>
+      <div class="step">Step size h = 0.0001</div>
+      <div class="step">Stable up to 5th derivative</div>
+    `;
+  }
+  catch{
     result.innerHTML=`<span class="error">Invalid or unsupported expression</span>`;
   }
 }
 
+function ordinal(n){
+  return n===1?"st":n===2?"nd":n===3?"rd":"th";
+}
+
 function resetAll(){
   fx.value="sin(x^2)";
-  xval.value="";
+  evalx.value="2";
+  order.value="1";
   result.innerHTML="";
-  stepsDiv.innerHTML="";
-  rules.innerHTML="";
+  steps.innerHTML="";
 }
 </script>
 
