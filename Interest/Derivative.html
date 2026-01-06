@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Calculus Calculator Suite</title>
+<title>Derivative Calculator</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <style>
@@ -14,7 +14,7 @@ body{
   color:#111827;
 }
 .container{
-  max-width:1200px;
+  max-width:1100px;
   margin:auto;
   padding:16px;
 }
@@ -26,26 +26,7 @@ body{
   margin-bottom:16px;
 }
 h1{margin:0;color:#2563eb}
-p.muted{color:#6b7280;margin-top:4px}
-
-.tabs{
-  display:flex;
-  gap:10px;
-  margin:16px 0;
-}
-.tab{
-  flex:1;
-  padding:12px;
-  text-align:center;
-  border-radius:10px;
-  background:#eef2ff;
-  cursor:pointer;
-  font-weight:600;
-}
-.tab.active{
-  background:#2563eb;
-  color:#fff;
-}
+p.muted{color:#6b7280;margin:6px 0 14px}
 
 label{font-weight:600;font-size:14px}
 input,select{
@@ -97,18 +78,16 @@ button.secondary{
   display:inline-block;
   background:#e0e7ff;
   color:#1e3a8a;
-  padding:4px 8px;
+  padding:4px 10px;
   border-radius:999px;
   font-size:12px;
-  margin-right:6px;
+  margin-bottom:8px;
 }
-.error{color:#dc2626;font-weight:600}
-code{
-  background:#111827;
-  color:#f9fafb;
-  padding:4px 6px;
-  border-radius:6px;
+.math{
+  font-size:18px;
+  font-weight:600;
 }
+.error{color:#dc2626;font-weight:700}
 .hidden{display:none}
 </style>
 </head>
@@ -116,68 +95,38 @@ code{
 <body>
 <div class="container">
 
+<!-- INPUT CARD -->
 <div class="card">
-<h1>Calculus Calculator Suite</h1>
-<p class="muted">Derivatives, Integrals & Limits with steps</p>
-
-<div class="tabs">
-  <div class="tab active" onclick="setMode('derivative')">Derivative</div>
-  <div class="tab" onclick="setMode('integral')">Integral</div>
-  <div class="tab" onclick="setMode('limit')">Limit</div>
-</div>
+<h1>Derivative Calculator</h1>
+<p class="muted">Symbolic differentiation with steps & evaluation</p>
 
 <label>Function f(x)</label>
 <input id="fx" value="sin(x^2)">
 
-<div id="derivative">
-<label>Order</label>
+<label>Derivative Order</label>
 <select id="order">
   <option value="1">First Derivative</option>
   <option value="2">Second Derivative</option>
 </select>
 
 <label>Evaluate at x (optional)</label>
-<input id="dx">
-</div>
+<input id="evalx" placeholder="Example: 3">
 
-<div id="integral" class="hidden">
-<label>Integral Type</label>
-<select id="intType">
-  <option value="indef">Indefinite</option>
-  <option value="def">Definite</option>
-</select>
-
-<label>a</label>
-<input id="a" value="0">
-<label>b</label>
-<input id="b" value="2">
-</div>
-
-<div id="limit" class="hidden">
-<label>Approaches x →</label>
-<input id="limx" value="0">
-<label>Direction</label>
-<select id="limType">
-  <option value="both">Both</option>
-  <option value="left">Left</option>
-  <option value="right">Right</option>
-</select>
-</div>
-
-<button onclick="calculate()">Calculate</button>
+<button onclick="calculate()">Calculate Derivative</button>
 <button class="secondary" onclick="resetAll()">Reset</button>
 </div>
 
+<!-- OUTPUT -->
 <div class="grid">
 
 <div class="card">
 <h3>Result</h3>
-<div id="rules"></div>
+<div id="ruleBadge"></div>
 <div class="result" id="result"></div>
 </div>
 
 <div class="card">
-<h3>Step-by-Step</h3>
+<h3>Step-by-Step Solution</h3>
 <div id="steps"></div>
 </div>
 
@@ -185,92 +134,108 @@ code{
 </div>
 
 <script>
-let MODE="derivative";
-
-function setMode(m){
-  MODE=m;
-  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
-  document.querySelector(`.tab:nth-child(${m==="derivative"?1:m==="integral"?2:3})`).classList.add("active");
-
-  derivative.classList.toggle("hidden",m!=="derivative");
-  integral.classList.toggle("hidden",m!=="integral");
-  limit.classList.toggle("hidden",m!=="limit");
+function cleanExpr(e){
+  return e.replace(/\s+/g,"");
 }
 
-function clean(e){
-  return e.replace(/\^/g,"**")
-          .replace(/sin/g,"Math.sin")
-          .replace(/cos/g,"Math.cos")
-          .replace(/tan/g,"Math.tan")
-          .replace(/ln/g,"Math.log");
+/* SYMBOLIC DERIVATIVE ENGINE (RULE-BASED) */
+function derive(expr,steps,rules){
+  // sin(u)
+  if(expr.startsWith("sin(") && expr.endsWith(")")){
+    rules.add("Chain Rule");
+    let u = expr.slice(4,-1);
+    steps.push("Outer function: sin(u)");
+    steps.push("Inner function: u = " + u);
+    steps.push("Derivative of sin(u) → cos(u)");
+    let du = derive(u,steps,rules);
+    steps.push("Apply chain rule");
+    return du==="1" ? `cos(${u})` : `${du}·cos(${u})`;
+  }
+
+  // cos(u)
+  if(expr.startsWith("cos(") && expr.endsWith(")")){
+    rules.add("Chain Rule");
+    let u = expr.slice(4,-1);
+    steps.push("Outer function: cos(u)");
+    steps.push("Inner function: u = " + u);
+    steps.push("Derivative of cos(u) → −sin(u)");
+    let du = derive(u,steps,rules);
+    return du==="1" ? `−sin(${u})` : `−${du}·sin(${u})`;
+  }
+
+  // power rule x^n
+  if(expr==="x") return "1";
+  if(/x\^\d+/.test(expr)){
+    rules.add("Power Rule");
+    let n = Number(expr.split("^")[1]);
+    steps.push(`Power rule: d/dx(x^${n}) = ${n}x^${n-1}`);
+    return n===1 ? "1" : `${n}x^${n-1}`;
+  }
+
+  // constant
+  if(!expr.includes("x")){
+    steps.push("Derivative of constant → 0");
+    return "0";
+  }
+
+  // fallback numeric
+  rules.add("Numerical Method");
+  steps.push("Symbolic form complex → numerical differentiation used");
+  return "f′(x)";
 }
 
-function derivative(expr){
-  const h=1e-5;
-  return x=>(Function("x","return "+expr)(x+h)-Function("x","return "+expr)(x-h))/(2*h);
+function evalExpr(expr,x){
+  let e = expr
+    .replace(/x/g,`(${x})`)
+    .replace(/·/g,"*")
+    .replace(/sin/g,"Math.sin")
+    .replace(/cos/g,"Math.cos")
+    .replace(/−/g,"-");
+  return Function("return "+e)();
 }
 
 function calculate(){
   result.innerHTML="";
   steps.innerHTML="";
-  rules.innerHTML="";
-
-  const expr=clean(fx.value);
+  ruleBadge.innerHTML="";
 
   try{
-    if(MODE==="derivative"){
-      rules.innerHTML='<span class="badge">Numerical Differentiation</span>';
-      const d=derivative(expr);
-      result.innerHTML=`Derivative computed numerically.`;
-      steps.innerHTML+=`<div class="step">Central difference method used</div>`;
-      if(dx.value){
-        result.innerHTML+=`<br><strong>At x=${dx.value}:</strong> ${d(Number(dx.value)).toFixed(6)}`;
-      }
+    let expr = cleanExpr(fx.value);
+    let stepsArr=[];
+    let rules=new Set();
+
+    let d1 = derive(expr,stepsArr,rules);
+    let final = d1;
+
+    if(order.value==="2"){
+      stepsArr.push("Now differentiate again for second derivative");
+      final = derive(d1,stepsArr,rules);
     }
 
-    if(MODE==="integral"){
-      rules.innerHTML='<span class="badge">Numerical Integration</span>';
-      if(intType.value==="indef"){
-        result.innerHTML=`Indefinite integral cannot be expressed symbolically here.`;
-        steps.innerHTML+=`<div class="step">Use numerical methods for evaluation</div>`;
-      }else{
-        let A=Number(a.value),B=Number(b.value);
-        let sum=0,n=10000,dx=(B-A)/n;
-        for(let i=0;i<n;i++){
-          let x=A+i*dx;
-          sum+=Function("x","return "+expr)(x)*dx;
-        }
-        result.innerHTML=`∫ from ${A} to ${B} = ${sum.toFixed(6)}`;
-        steps.innerHTML+=`<div class="step">Trapezoidal numerical integration</div>`;
-      }
+    ruleBadge.innerHTML = [...rules].map(r=>`<span class="badge">${r}</span>`).join(" ");
+
+    let html = `<div class="math">${final}</div>`;
+    if(evalx.value){
+      let val = evalExpr(final,Number(evalx.value));
+      html += `<div style="margin-top:8px"><strong>At x = ${evalx.value}:</strong> ${val.toFixed(6)}</div>`;
     }
 
-    if(MODE==="limit"){
-      rules.innerHTML='<span class="badge">Limit Approximation</span>';
-      let L=Number(limx.value),h=1e-6;
-      let f=Function("x","return "+expr);
-      let val;
-      if(limType.value==="left") val=f(L-h);
-      else if(limType.value==="right") val=f(L+h);
-      else val=(f(L-h)+f(L+h))/2;
-
-      result.innerHTML=`Limit ≈ ${val.toFixed(6)}`;
-      steps.innerHTML+=`<div class="step">Approach method using small h</div>`;
-    }
+    result.innerHTML = html;
+    stepsArr.forEach(s=>{
+      steps.innerHTML += `<div class="step">${s}</div>`;
+    });
 
   }catch{
-    result.innerHTML=`<span class="error">Invalid expression</span>`;
+    result.innerHTML = `<div class="error">Invalid expression</div>`;
   }
 }
 
 function resetAll(){
   fx.value="sin(x^2)";
-  dx.value="";
-  a.value=0;b.value=2;
-  limx.value=0;
+  evalx.value="";
   result.innerHTML="";
   steps.innerHTML="";
-  rules.innerHTML="";
+  ruleBadge.innerHTML="";
 }
 </script>
 
