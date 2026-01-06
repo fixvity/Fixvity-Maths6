@@ -26,7 +26,7 @@ body{
   margin-bottom:16px;
 }
 h1{margin:0;color:#2563eb}
-p.muted{color:#6b7280;margin:6px 0 14px}
+p.muted{color:#6b7280;margin-top:4px}
 
 label{font-weight:600;font-size:14px}
 input,select{
@@ -78,24 +78,24 @@ button.secondary{
   display:inline-block;
   background:#e0e7ff;
   color:#1e3a8a;
-  padding:4px 10px;
+  padding:4px 8px;
   border-radius:999px;
   font-size:12px;
-  margin-bottom:8px;
-}
-.math{
-  font-size:18px;
-  font-weight:600;
+  margin-right:6px;
 }
 .error{color:#dc2626;font-weight:700}
-.hidden{display:none}
+code{
+  background:#111827;
+  color:#f9fafb;
+  padding:4px 6px;
+  border-radius:6px;
+}
 </style>
 </head>
 
 <body>
 <div class="container">
 
-<!-- INPUT CARD -->
 <div class="card">
 <h1>Derivative Calculator</h1>
 <p class="muted">Symbolic differentiation with steps & evaluation</p>
@@ -110,18 +110,17 @@ button.secondary{
 </select>
 
 <label>Evaluate at x (optional)</label>
-<input id="evalx" placeholder="Example: 3">
+<input id="xval" placeholder="Example: 3">
 
 <button onclick="calculate()">Calculate Derivative</button>
 <button class="secondary" onclick="resetAll()">Reset</button>
 </div>
 
-<!-- OUTPUT -->
 <div class="grid">
 
 <div class="card">
 <h3>Result</h3>
-<div id="ruleBadge"></div>
+<div id="rules"></div>
 <div class="result" id="result"></div>
 </div>
 
@@ -134,108 +133,114 @@ button.secondary{
 </div>
 
 <script>
-function cleanExpr(e){
-  return e.replace(/\s+/g,"");
-}
-
-/* SYMBOLIC DERIVATIVE ENGINE (RULE-BASED) */
-function derive(expr,steps,rules){
-  // sin(u)
-  if(expr.startsWith("sin(") && expr.endsWith(")")){
-    rules.add("Chain Rule");
-    let u = expr.slice(4,-1);
-    steps.push("Outer function: sin(u)");
-    steps.push("Inner function: u = " + u);
-    steps.push("Derivative of sin(u) → cos(u)");
-    let du = derive(u,steps,rules);
-    steps.push("Apply chain rule");
-    return du==="1" ? `cos(${u})` : `${du}·cos(${u})`;
-  }
-
-  // cos(u)
-  if(expr.startsWith("cos(") && expr.endsWith(")")){
-    rules.add("Chain Rule");
-    let u = expr.slice(4,-1);
-    steps.push("Outer function: cos(u)");
-    steps.push("Inner function: u = " + u);
-    steps.push("Derivative of cos(u) → −sin(u)");
-    let du = derive(u,steps,rules);
-    return du==="1" ? `−sin(${u})` : `−${du}·sin(${u})`;
-  }
-
-  // power rule x^n
-  if(expr==="x") return "1";
-  if(/x\^\d+/.test(expr)){
-    rules.add("Power Rule");
-    let n = Number(expr.split("^")[1]);
-    steps.push(`Power rule: d/dx(x^${n}) = ${n}x^${n-1}`);
-    return n===1 ? "1" : `${n}x^${n-1}`;
-  }
-
-  // constant
-  if(!expr.includes("x")){
-    steps.push("Derivative of constant → 0");
-    return "0";
-  }
-
-  // fallback numeric
-  rules.add("Numerical Method");
-  steps.push("Symbolic form complex → numerical differentiation used");
-  return "f′(x)";
-}
-
-function evalExpr(expr,x){
-  let e = expr
-    .replace(/x/g,`(${x})`)
-    .replace(/·/g,"*")
+function cleanNumeric(expr){
+  return expr
+    .replace(/\^/g,"**")
     .replace(/sin/g,"Math.sin")
     .replace(/cos/g,"Math.cos")
-    .replace(/−/g,"-");
-  return Function("return "+e)();
+    .replace(/tan/g,"Math.tan")
+    .replace(/ln/g,"Math.log")
+    .replace(/e\^x/g,"Math.exp(x)");
 }
 
+function evalAt(expr,x){
+  const js = cleanNumeric(expr).replace(/x/g,`(${x})`);
+  return Function("return "+js)();
+}
+
+/* ---- SYMBOLIC DERIVATIVE (SAFE RULE SET) ---- */
+function symbolicDerivative(expr, steps){
+  expr = expr.replace(/\s+/g,"");
+
+  // sin(x^n)
+  let m = expr.match(/^sin\(x\^(\d+)\)$/);
+  if(m){
+    steps.push("Outer function: sin(u)");
+    steps.push("Inner function: u = x^"+m[1]);
+    steps.push("Derivative of sin(u) = cos(u)");
+    steps.push("Derivative of u = "+m[1]+"x^"+(m[1]-1));
+    return `${m[1]}*x^${m[1]-1}*cos(x^${m[1]})`;
+  }
+
+  // cos(x^n)
+  m = expr.match(/^cos\(x\^(\d+)\)$/);
+  if(m){
+    steps.push("Outer function: cos(u)");
+    steps.push("Inner function: u = x^"+m[1]);
+    steps.push("Derivative of cos(u) = -sin(u)");
+    steps.push("Derivative of u = "+m[1]+"x^"+(m[1]-1));
+    return `-${m[1]}*x^${m[1]-1}*sin(x^${m[1]})`;
+  }
+
+  // x^n
+  m = expr.match(/^x\^(\d+)$/);
+  if(m){
+    steps.push("Power rule applied");
+    return `${m[1]}*x^${m[1]-1}`;
+  }
+
+  // sin(x)
+  if(expr==="sin(x)"){
+    steps.push("Derivative of sin(x)");
+    return "cos(x)";
+  }
+
+  // cos(x)
+  if(expr==="cos(x)"){
+    steps.push("Derivative of cos(x)");
+    return "-sin(x)";
+  }
+
+  throw "Unsupported expression";
+}
+
+/* ---- CALCULATE ---- */
 function calculate(){
+  const fx = document.getElementById("fx").value.trim();
+  const order = document.getElementById("order").value;
+  const xval = document.getElementById("xval").value;
+
+  const result = document.getElementById("result");
+  const stepsDiv = document.getElementById("steps");
+  const rules = document.getElementById("rules");
+
   result.innerHTML="";
-  steps.innerHTML="";
-  ruleBadge.innerHTML="";
+  stepsDiv.innerHTML="";
+  rules.innerHTML="";
 
   try{
-    let expr = cleanExpr(fx.value);
-    let stepsArr=[];
-    let rules=new Set();
+    let steps=[];
+    let d1 = symbolicDerivative(fx, steps);
+    let derivative = d1;
 
-    let d1 = derive(expr,stepsArr,rules);
-    let final = d1;
-
-    if(order.value==="2"){
-      stepsArr.push("Now differentiate again for second derivative");
-      final = derive(d1,stepsArr,rules);
+    if(order==="2"){
+      steps.push("Second derivative applied");
+      derivative = symbolicDerivative(d1, steps);
     }
 
-    ruleBadge.innerHTML = [...rules].map(r=>`<span class="badge">${r}</span>`).join(" ");
+    rules.innerHTML='<span class="badge">Chain Rule</span><span class="badge">Power Rule</span>';
+    result.innerHTML=`<strong>Derivative:</strong> <code>${derivative}</code>`;
 
-    let html = `<div class="math">${final}</div>`;
-    if(evalx.value){
-      let val = evalExpr(final,Number(evalx.value));
-      html += `<div style="margin-top:8px"><strong>At x = ${evalx.value}:</strong> ${val.toFixed(6)}</div>`;
+    if(xval){
+      const numeric = evalAt(derivative, Number(xval));
+      result.innerHTML += `<br><strong>At x = ${xval}:</strong> ${numeric.toFixed(6)}`;
     }
 
-    result.innerHTML = html;
-    stepsArr.forEach(s=>{
-      steps.innerHTML += `<div class="step">${s}</div>`;
+    steps.forEach(s=>{
+      stepsDiv.innerHTML += `<div class="step">${s}</div>`;
     });
 
   }catch{
-    result.innerHTML = `<div class="error">Invalid expression</div>`;
+    result.innerHTML=`<span class="error">Invalid or unsupported expression</span>`;
   }
 }
 
 function resetAll(){
   fx.value="sin(x^2)";
-  evalx.value="";
+  xval.value="";
   result.innerHTML="";
-  steps.innerHTML="";
-  ruleBadge.innerHTML="";
+  stepsDiv.innerHTML="";
+  rules.innerHTML="";
 }
 </script>
 
